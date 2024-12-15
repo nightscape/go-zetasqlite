@@ -327,6 +327,28 @@ func (s *ColumnSpec) SQLiteSchema() string {
 	return schema
 }
 
+type SchemaSpec struct {
+	NamePath   NamePath       `json:"namePath"`
+	CreateMode ast.CreateMode `json:"createMode"`
+	UpdatedAt  time.Time      `json:"updatedAt"`
+	CreatedAt  time.Time      `json:"createdAt"`
+}
+
+func (s *SchemaSpec) SchemaName() string {
+	return s.NamePath.getObjectName()
+}
+
+func newSchemaSpec(namePath *NamePath, stmt *ast.CreateSchemaStmtNode) *SchemaSpec {
+	schemaNamePath := stmt.NamePath()
+	now := time.Now()
+	return &SchemaSpec{
+		NamePath:   *namePath.mergePath(schemaNamePath),
+		CreateMode: stmt.CreateMode(),
+		UpdatedAt:  now,
+		CreatedAt:  now,
+	}
+}
+
 func newTypeFromFunctionArgumentType(t *types.FunctionArgumentType) *Type {
 	if t.IsTemplated() {
 		return &Type{SignatureKind: t.Kind()}
