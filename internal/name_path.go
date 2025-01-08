@@ -3,6 +3,8 @@ package internal
 import (
 	"fmt"
 	"strings"
+
+	"github.com/goccy/go-json"
 )
 
 type NamePath struct {
@@ -10,8 +12,20 @@ type NamePath struct {
 	maxNum int
 }
 
+func (p *NamePath) Clone() *NamePath {
+	return &NamePath{path: append([]string{}, p.path...)}
+}
+
+func (p *NamePath) MarshalJSON() ([]byte, error) {
+	return json.Marshal(p.path)
+}
+
+func (p *NamePath) UnmarshalJSON(data []byte) error {
+	return json.Unmarshal(data, &p.path)
+}
+
 func (p *NamePath) isInformationSchema(path []string) bool {
-	if len(path) == 0 {
+	if p.empty() {
 		return false
 	}
 	// If INFORMATION_SCHEMA is at the end of path, ignore it.
@@ -50,14 +64,14 @@ func (p *NamePath) normalizePath(path []string) []string {
 	return ret
 }
 
-func (p *NamePath) mergePath(path []string) []string {
+func (p *NamePath) mergePath(path []string) *NamePath {
 	path = p.normalizePath(path)
 	maxNum := p.getMaxNum(path)
-	if maxNum > 0 && len(path) == maxNum {
-		return path
+	if maxNum > 0 && p.hasMaxComponents(path) {
+		return &NamePath{path: path}
 	}
 	if len(path) == 0 {
-		return p.path
+		return &NamePath{path: p.path}
 	}
 	merged := []string{}
 	for _, basePath := range p.path {
@@ -69,15 +83,48 @@ func (p *NamePath) mergePath(path []string) []string {
 		}
 		merged = append(merged, basePath)
 	}
-	return append(merged, path...)
+	return &NamePath{path: append(merged, path...)}
 }
 
 func (p *NamePath) format(path []string) string {
-	return formatPath(p.mergePath(path))
+	mergedPath := p.mergePath(path)
+	return mergedPath.FormatNamePath()
 }
 
-func formatPath(path []string) string {
-	return strings.Join(path, "_")
+func (p *NamePath) hasFullyQualifiedName() bool {
+	return p.Length() > 2
+}
+
+func (p *NamePath) getProjectName() string {
+	if p.Length() < 2 {
+		return ""
+	}
+	return p.path[0]
+}
+
+func (p *NamePath) dropFirst() *NamePath {
+	if p.empty() {
+		return p
+	}
+	return &NamePath{path: p.path[1:]}
+}
+
+func (p *NamePath) dropLast() *NamePath {
+	if p.empty() {
+		return p
+	}
+	return &NamePath{path: p.path[:len(p.path)-1]}
+}
+
+func (p *NamePath) FormatNamePath() string {
+	if p.hasFullyQualifiedName() {
+		return fmt.Sprintf("%s.%s", p.getProjectName(), strings.Join(p.path[1:], "_"))
+	}
+	return strings.Join(p.path, "_")
+}
+
+func (p *NamePath) Path() []string {
+	return p.path
 }
 
 func (p *NamePath) setPath(path []string) error {
@@ -106,6 +153,38 @@ func (p *NamePath) addPath(path string) error {
 	return nil
 }
 
+func (p *NamePath) replace(index int, value string) {
+	p.path[index] = value
+}
+
 func (p *NamePath) empty() bool {
 	return len(p.path) == 0
+}
+
+func (p *NamePath) Length() int {
+	return len(p.path)
+}
+
+func NewNamePath(path []string) *NamePath {
+	return &NamePath{path: path}
+}
+
+func (p *NamePath) hasSimpleName() bool {
+	return p.Length() == 1
+}
+
+func (p *NamePath) hasMaxComponents(path []string) bool {
+	maxNum := p.getMaxNum(path)
+	return maxNum > 0 && len(path) == maxNum
+}
+
+func (p *NamePath) hasQualifiers() bool {
+	return p.Length() > 1
+}
+
+func (p *NamePath) getObjectName() string {
+	if p.empty() {
+		return ""
+	}
+	return p.path[p.Length()-1]
 }
